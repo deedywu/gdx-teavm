@@ -373,9 +373,17 @@ public class AssetsCopy {
             if(asset.endsWith(".js") || asset.endsWith(".wasm")) {
                 plan.scripts.add(asset);
             }
+            else if(asset.startsWith("/external_cpp/thirdparty/freetype/")) {
+                plan.cppFiles.add(asset);
+            }
+            else if(asset.startsWith("/external_cpp/thirdparty/")) {
+                plan.cppFiles.add(asset);
+            }
             else if(asset.startsWith("/external_cpp/")) {
                 if(asset.endsWith(".lib") || asset.endsWith(".a") || asset.endsWith(".h")
-                        || asset.endsWith(".c") || asset.endsWith(".cpp")) {
+                        || asset.endsWith(".c") || asset.endsWith(".cpp")
+                        || asset.endsWith("CMakeLists.txt") || asset.endsWith(".cmake")
+                        || isNativeLibrary(asset)) {
                     plan.cppFiles.add(asset);
                 }
             }
@@ -384,6 +392,13 @@ public class AssetsCopy {
             }
         }
         return remaining;
+    }
+
+    private static boolean isNativeLibrary(String asset) {
+        return asset.endsWith(".dll")
+                || asset.endsWith(".dylib")
+                || asset.endsWith(".so")
+                || asset.contains(".so.");
     }
 
     private static long copy(InputStream input, AssetOutput output, String targetPath) throws IOException {

@@ -42,6 +42,22 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/c/external_cpp/teavm_optimizati
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/c/external_cpp/teavm_stats")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/c/external_cpp/stb/include")
 
+set(GDX_FREETYPE_BRIDGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/c/external_cpp/src/freetype")
+set(GDX_FREETYPE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/c/external_cpp/thirdparty/freetype")
+set(GDX_FREETYPE_BRIDGE_INCLUDE_DIR "${GDX_FREETYPE_BRIDGE_SOURCE_DIR}/include")
+set(GDX_FREETYPE_BRIDGE_HEADER "${GDX_FREETYPE_BRIDGE_INCLUDE_DIR}/gdx2d_freetype_bridge.h")
+set(GDX2D_FREETYPE_BRIDGE_PREBUILT_LIB "${CMAKE_CURRENT_SOURCE_DIR}/c/release/assets/gdx2d_freetype_bridge.lib")
+set(GDX2D_FREETYPE_BRIDGE_PREBUILT_DLL "${CMAKE_CURRENT_SOURCE_DIR}/c/release/assets/gdx2d_freetype_bridge.dll")
+set(GDX_FREETYPE_USE_PREBUILT FALSE)
+
+if(WIN32 AND EXISTS "${GDX2D_FREETYPE_BRIDGE_PREBUILT_LIB}")
+  set(GDX_FREETYPE_USE_PREBUILT TRUE)
+endif()
+
+if(NOT GDX_FREETYPE_USE_PREBUILT AND EXISTS "${GDX_FREETYPE_BRIDGE_SOURCE_DIR}/CMakeLists.txt" AND EXISTS "${GDX_FREETYPE_SOURCE_DIR}/CMakeLists.txt")
+  add_subdirectory("${GDX_FREETYPE_BRIDGE_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/freetype-build" EXCLUDE_FROM_ALL)
+endif()
+
 if (WIN32)
   # Link directories
   link_directories("${CMAKE_CURRENT_SOURCE_DIR}/c/external_cpp/glfw/lib-vc2022")
@@ -72,6 +88,8 @@ set(TEAVM_SPRITEBATCH_LONG_SOURCE_PATH "classes/com/badlogic/gdx/graphics/g2d/Sp
 set(TEAVM_SPRITEBATCH_SHORT_SOURCE_PATH "c/c/b/g/g/g/SpriteBatch.c")
 set(TEAVM_SPRITEBATCH_LONG_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/c/src/classes/com/badlogic/gdx/graphics/g2d/SpriteBatch.h")
 set(TEAVM_SPRITEBATCH_SHORT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/c/src/c/c/b/g/g/g/SpriteBatch.h")
+set(TEAVM_SPRITE_LONG_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/c/src/classes/com/badlogic/gdx/graphics/g2d/Sprite.h")
+set(TEAVM_SPRITE_SHORT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/c/src/c/c/b/g/g/g/Sprite.h")
 set(TEAVM_SPRITEBATCH_GENERATED FALSE)
 set(TEAVM_SPRITEBATCH_SHORT_HEADERS FALSE)
 if(EXISTS "${TEAVM_GENERATED_SOURCES_LIST}")
@@ -93,6 +111,12 @@ if(NOT TEAVM_SPRITEBATCH_GENERATED)
     set(TEAVM_SPRITEBATCH_GENERATED TRUE)
   endif()
 endif()
+if(TEAVM_SPRITEBATCH_SHORT_HEADERS AND NOT EXISTS "${TEAVM_SPRITE_SHORT_HEADER}")
+  set(TEAVM_SPRITEBATCH_GENERATED FALSE)
+endif()
+if(TEAVM_SPRITEBATCH_GENERATED AND NOT TEAVM_SPRITEBATCH_SHORT_HEADERS AND NOT EXISTS "${TEAVM_SPRITE_LONG_HEADER}")
+  set(TEAVM_SPRITEBATCH_GENERATED FALSE)
+endif()
 if(EXISTS "${TEAVM_SPRITEBATCH_SOURCE}" AND TEAVM_SPRITEBATCH_GENERATED)
   list(APPEND SOURCES "${TEAVM_SPRITEBATCH_SOURCE}")
 endif()
@@ -103,6 +127,14 @@ list(APPEND SOURCES ${EXTERNAL_SOURCES_2})
 
 # Add executable
 add_executable(${PROJECT_NAME} ${SOURCES})
+
+if(EXISTS "${GDX_FREETYPE_BRIDGE_HEADER}")
+  target_include_directories(${PROJECT_NAME} PRIVATE "${GDX_FREETYPE_BRIDGE_INCLUDE_DIR}")
+  target_compile_options(${PROJECT_NAME} PRIVATE
+      $<$<BOOL:${WIN32}>:/FI${GDX_FREETYPE_BRIDGE_HEADER}>
+      $<$<BOOL:${UNIX}>:-include>
+      $<$<BOOL:${UNIX}>:${GDX_FREETYPE_BRIDGE_HEADER}>)
+endif()
 
 if(TEAVM_SPRITEBATCH_SHORT_HEADERS)
   target_compile_definitions(${PROJECT_NAME} PRIVATE TEAVM_GENERATED_SHORT_FILE_NAMES=1)
@@ -129,11 +161,28 @@ if (WIN32)
   # Link libraries
   target_link_libraries(${PROJECT_NAME} glfw3 opengl32 glew32s)
 
-  # Set startup project for Visual Studio
-  set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+  if(GDX_FREETYPE_USE_PREBUILT)
+    target_link_libraries(${PROJECT_NAME} "${GDX2D_FREETYPE_BRIDGE_PREBUILT_LIB}")
+
+    if(EXISTS "${GDX2D_FREETYPE_BRIDGE_PREBUILT_DLL}")
+      add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  "${GDX2D_FREETYPE_BRIDGE_PREBUILT_DLL}"
+                  "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+    endif()
+  endif()
 endif()
 if (UNIX)
   target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL glfw GLEW::GLEW m)
+endif()
+
+if(NOT GDX_FREETYPE_USE_PREBUILT AND TARGET gdx2d_freetype_bridge)
+  target_link_libraries(${PROJECT_NAME} gdx2d_freetype_bridge)
+endif()
+
+if (WIN32)
+  # Set startup project for Visual Studio
+  set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES

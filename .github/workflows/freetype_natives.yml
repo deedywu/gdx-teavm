@@ -1,0 +1,142 @@
+name: Build FreeType Natives
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build"
+        required: false
+        default: "master"
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-natives:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            label: Linux x64
+            classifier: natives-linux-x64
+            native_platform: linux
+            native_arch: x64
+            cmake_generator: Ninja
+            cmake_arch: ""
+            cmake_osx_arch: ""
+          - os: ubuntu-24.04-arm
+            label: Linux arm64
+            classifier: natives-linux-arm64
+            native_platform: linux
+            native_arch: arm64
+            cmake_generator: Ninja
+            cmake_arch: ""
+            cmake_osx_arch: ""
+          - os: macos-15-intel
+            label: macOS x64
+            classifier: natives-macos-x64
+            native_platform: macos
+            native_arch: x64
+            cmake_generator: Ninja
+            cmake_arch: ""
+            cmake_osx_arch: x86_64
+          - os: macos-15
+            label: macOS arm64
+            classifier: natives-macos-arm64
+            native_platform: macos
+            native_arch: arm64
+            cmake_generator: Ninja
+            cmake_arch: ""
+            cmake_osx_arch: arm64
+          - os: windows-2025
+            label: Windows x64
+            classifier: natives-windows-x64
+            native_platform: windows
+            native_arch: x64
+            cmake_generator: Visual Studio 17 2022
+            cmake_arch: x64
+            cmake_osx_arch: ""
+          - os: windows-11-arm
+            label: Windows arm64
+            classifier: natives-windows-arm64
+            native_platform: windows
+            native_arch: arm64
+            cmake_generator: Visual Studio 17 2022
+            cmake_arch: ARM64
+            cmake_osx_arch: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+          cache: gradle
+
+      - name: Allow Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Sync FreeType source
+        run: ./gradlew :extensions:glfw:gdx-freetype-glfw:freetype_sync_source
+
+      - name: Configure, build and install native library
+        run: |
+          set -euo pipefail
+
+          module_dir="$GITHUB_WORKSPACE/extensions/glfw/gdx-freetype-glfw"
+          bridge_dir="$module_dir/src/main/resources/external_cpp/src/freetype"
+          freetype_source="$module_dir/build/generated/gdx-freetype/resources/external_cpp/thirdparty/freetype"
+          build_dir="$module_dir/build/freetype-native/${{ matrix.classifier }}"
+          install_dir="$module_dir/build/freetype-install/${{ matrix.classifier }}"
+
+          rm -rf "$build_dir" "$install_dir"
+          mkdir -p "$build_dir" "$install_dir"
+
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cmake -S "$bridge_dir" \
+              -B "$build_dir" \
+              -G "${{ matrix.cmake_generator }}" \
+              -A "${{ matrix.cmake_arch }}" \
+              -DGDX_FREETYPE_BUILD_SHARED=ON \
+              -DGDX_FREETYPE_SOURCE_DIR="$freetype_source" \
+              -DCMAKE_INSTALL_PREFIX="$install_dir"
+            cmake --build "$build_dir" --config Release
+            cmake --install "$build_dir" --config Release
+          else
+            extra_args=()
+            if [[ "${{ matrix.cmake_osx_arch }}" != "" ]]; then
+              extra_args+=("-DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_arch }}")
+            fi
+            cmake -S "$bridge_dir" \
+              -B "$build_dir" \
+              -G "${{ matrix.cmake_generator }}" \
+              -DGDX_FREETYPE_BUILD_SHARED=ON \
+              -DGDX_FREETYPE_SOURCE_DIR="$freetype_source" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="$install_dir" \
+              "${extra_args[@]}"
+            cmake --build "$build_dir"
+            cmake --install "$build_dir"
+          fi
+
+          ./gradlew :extensions:glfw:gdx-freetype-glfw:freetype_nativesJar \
+            -PgdxFreetypeNativeSourceDir="$install_dir" \
+            -PgdxFreetypeNativePlatform=${{ matrix.native_platform }} \
+            -PgdxFreetypeNativeArch=${{ matrix.native_arch }} \
+            -PgdxFreetypeNativeClassifier=${{ matrix.classifier }}
+
+      - name: Upload packaged jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdx-freetype-glfw-${{ matrix.classifier }}
+          path: extensions/glfw/gdx-freetype-glfw/build/libs/*-${{ matrix.classifier }}.jar

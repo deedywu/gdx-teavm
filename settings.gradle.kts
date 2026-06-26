@@ -49,6 +49,7 @@ else {
 
 include(":extensions:asset-loader")
 include(":extensions:glfw:gdx-controllers-glfw")
+include(":extensions:glfw:gdx-freetype-glfw")
 include(":extensions:web:gdx-controllers-web")
 include(":extensions:web:gdx-freetype-web")
 
@@ -77,6 +78,7 @@ include(":benchmark:glfw")
 
 include(":examples:freetype:core")
 include(":examples:freetype:desktop")
+include(":examples:freetype:glfw")
 include(":examples:freetype:web")
 
 val file = File(settingsDir, "gradle.properties")

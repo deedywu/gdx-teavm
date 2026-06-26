@@ -21,6 +21,7 @@ public class FreetypeDemo implements ApplicationListener {
     @Override
     public void create() {
         boolean flip = false;
+        System.out.println("FreetypeDemo:create:start");
         batch = new SpriteBatch();
         if(flip) {
             OrthographicCamera cam = new OrthographicCamera();
@@ -30,8 +31,10 @@ public class FreetypeDemo implements ApplicationListener {
         }
         font = new BitmapFont(Gdx.files.internal("data/lsans-15.fnt"), flip);
         FileHandle fontFile = Gdx.files.internal("data/lsans.ttf");
+        System.out.println("FreetypeDemo:create:before-generator");
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(fontFile);
+        System.out.println("FreetypeDemo:create:after-generator");
 
         FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         parameter.size = 15;
@@ -43,9 +46,13 @@ public class FreetypeDemo implements ApplicationListener {
         // parameter.borderWidth = 1f;
         // parameter.borderColor = Color.PURPLE;
 
+        System.out.println("FreetypeDemo:create:before-generateData");
         FreeTypeFontGenerator.FreeTypeBitmapFontData fontData = generator.generateData(parameter);
+        System.out.println("FreetypeDemo:create:after-generateData");
         ftFont = generator.generateFont(parameter);
+        System.out.println("FreetypeDemo:create:after-generateFont");
         generator.dispose();
+        System.out.println("FreetypeDemo:create:end");
     }
 
     @Override

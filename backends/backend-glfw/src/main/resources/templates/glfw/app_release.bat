@@ -20,16 +20,26 @@ set CMAKE_PATH=cmake
 where cmake >nul 2>&1
 if errorlevel 1 (
     echo cmake not found in PATH, trying Visual Studio paths...
-    if exist "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" (
-        set "CMAKE_PATH=C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
-    ) else (
-        if exist "C:\Program Files (x86)\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" (
-            set "CMAKE_PATH=C:\Program Files (x86)\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
-        ) else (
-            echo cmake could not be found. Please install CMake or add it to PATH.
-            exit /b 1
+    for %%R in ("%ProgramFiles%" "%ProgramFiles(x86)%" "C:\Program Files" "C:\Program Files (x86)" "D:\Program Files" "D:\Program Files (x86)") do (
+        for /d %%Y in ("%%~R\Microsoft Visual Studio\*") do (
+            for /d %%E in ("%%~Y\*") do (
+                set "CMAKE_CANDIDATE=%%~fE\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+                if exist "!CMAKE_CANDIDATE!" (
+                    set "CMAKE_PATH=!CMAKE_CANDIDATE!"
+                    goto :cmake_found
+                )
+            )
         )
     )
+
+    echo cmake could not be found. Please install CMake or add it to PATH.
+    exit /b 1
+)
+
+:cmake_found
+if not exist "!CMAKE_PATH!" (
+    echo cmake could not be found. Please install CMake or add it to PATH.
+    exit /b 1
 )
 
 !CMAKE_PATH! -S . -B build\cmake
@@ -50,7 +60,7 @@ set MSBUILD_PATH=
 set VS_EDITION=
 
 :: Search Visual Studio installations (two levels deep)
-for %%R in ("%ProgramFiles%" "%ProgramFiles(x86)%") do (
+for %%R in ("%ProgramFiles%" "%ProgramFiles(x86)%" "C:\Program Files" "C:\Program Files (x86)" "D:\Program Files" "D:\Program Files (x86)") do (
     for /d %%Y in ("%%~R\Microsoft Visual Studio\*") do (
         for /d %%E in ("%%~Y\*") do (
             set "EDITION_DIR=%%~nxE"

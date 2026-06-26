@@ -60,3 +60,4 @@ local.properties
 **/gdx-bullet-core/src/main/java/**
 
 CURRENT_CHAT_CONTEXT
+examples/freetype/glfw/examples_probe_build/
