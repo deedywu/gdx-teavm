@@ -20,6 +20,10 @@ val freetypeNativeClassifierProperty = providers.gradleProperty("gdxFreetypeNati
 val freetypeNativeBridgeSourceDirProperty = providers.gradleProperty("gdxFreetypeNativeBridgeSourceDir")
 val freetypeLinuxArm64NativeSourceDirProperty = providers.gradleProperty("gdxFreetypeLinuxArm64NativeSourceDir")
 val freetypeLinuxArm64NativeBridgeSourceDirProperty = providers.gradleProperty("gdxFreetypeLinuxArm64NativeBridgeSourceDir")
+val freetypeMacosX64NativeSourceDirProperty = providers.gradleProperty("gdxFreetypeMacosX64NativeSourceDir")
+val freetypeMacosX64NativeBridgeSourceDirProperty = providers.gradleProperty("gdxFreetypeMacosX64NativeBridgeSourceDir")
+val freetypeMacosArm64NativeSourceDirProperty = providers.gradleProperty("gdxFreetypeMacosArm64NativeSourceDir")
+val freetypeMacosArm64NativeBridgeSourceDirProperty = providers.gradleProperty("gdxFreetypeMacosArm64NativeBridgeSourceDir")
 val freetypeWindowsX64NativeSourceDirProperty = providers.gradleProperty("gdxFreetypeWindowsX64NativeSourceDir")
 val freetypeWindowsX64NativeBridgeSourceDirProperty = providers.gradleProperty("gdxFreetypeWindowsX64NativeBridgeSourceDir")
 val freetypeWindowsArm64NativeSourceDirProperty = providers.gradleProperty("gdxFreetypeWindowsArm64NativeSourceDir")
@@ -30,6 +34,12 @@ val linuxX64NativeBuildDir = File(linuxX64NativeBuildRoot, "build")
 val linuxArm64NativeBuildRoot = layout.buildDirectory.dir("generated/gdx-freetype/native/linux-arm64").get().asFile
 val linuxArm64NativeSourceDir = File(linuxArm64NativeBuildRoot, "src")
 val linuxArm64NativeBuildDir = File(linuxArm64NativeBuildRoot, "build")
+val macosX64NativeBuildRoot = layout.buildDirectory.dir("generated/gdx-freetype/native/macos-x64").get().asFile
+val macosX64NativeSourceDir = File(macosX64NativeBuildRoot, "src")
+val macosX64NativeBuildDir = File(macosX64NativeBuildRoot, "build")
+val macosArm64NativeBuildRoot = layout.buildDirectory.dir("generated/gdx-freetype/native/macos-arm64").get().asFile
+val macosArm64NativeSourceDir = File(macosArm64NativeBuildRoot, "src")
+val macosArm64NativeBuildDir = File(macosArm64NativeBuildRoot, "build")
 val windowsX64NativeBuildRoot = layout.buildDirectory.dir("generated/gdx-freetype/native/windows-x64").get().asFile
 val windowsX64NativeSourceDir = File(windowsX64NativeBuildRoot, "src")
 val windowsX64NativeBuildDir = File(windowsX64NativeBuildRoot, "build")
@@ -39,9 +49,12 @@ val windowsArm64NativeBuildDir = File(windowsArm64NativeBuildRoot, "build")
 val hostOsName = System.getProperty("os.name").lowercase(Locale.ROOT)
 val hostArchName = System.getProperty("os.arch").lowercase(Locale.ROOT)
 val isLinuxHost = hostOsName.contains("linux")
+val isMacHost = hostOsName.contains("mac") || hostOsName.contains("darwin")
 val isWindowsHost = hostOsName.contains("windows")
 val isLinuxX64Host = isLinuxHost && setOf("x86_64", "amd64").contains(hostArchName)
 val isLinuxArm64Host = isLinuxHost && setOf("aarch64", "arm64").contains(hostArchName)
+val isMacX64Host = isMacHost && setOf("x86_64", "amd64").contains(hostArchName)
+val isMacArm64Host = isMacHost && setOf("aarch64", "arm64").contains(hostArchName)
 val isWindowsX64Host = isWindowsHost && setOf("x86_64", "amd64").contains(hostArchName)
 val isWindowsArm64Host = isWindowsHost && setOf("aarch64", "arm64").contains(hostArchName)
 
@@ -459,6 +472,184 @@ tasks.register<Jar>("freetype_natives_linux_arm64Jar") {
     }
 }
 
+tasks.register<Sync>("prepareMacosX64NativeBridgeSource") {
+    group = "extensions"
+    description = "Copies the GLFW FreeType bridge sources into a macOS x64 native build workspace."
+
+    from("src/main/resources/external_cpp/src/freetype")
+    into(macosX64NativeSourceDir)
+}
+
+tasks.register("buildMacosX64NativeBridge") {
+    group = "extensions"
+    description = "Builds the macOS x64 GLFW FreeType native bridge and bundled FreeType static library."
+
+    dependsOn("freetype_prepare_source")
+    dependsOn("prepareMacosX64NativeBridgeSource")
+    onlyIf { isMacHost }
+
+    outputs.file(File(macosX64NativeBuildDir, "libgdx2d_freetype_bridge.dylib"))
+    outputs.file(File(macosX64NativeBuildDir, "freetype-build/libfreetype.a"))
+
+    doLast {
+        macosX64NativeBuildDir.mkdirs()
+        runCommand(
+            macosX64NativeSourceDir,
+            listOf(
+                "cmake",
+                "-S", macosX64NativeSourceDir.absolutePath,
+                "-B", macosX64NativeBuildDir.absolutePath,
+                "-DGDX_FREETYPE_SOURCE_DIR=${freetypeSourceCacheDir.absolutePath}",
+                "-DGDX_FREETYPE_BUILD_SHARED=ON",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DCMAKE_OSX_ARCHITECTURES=x86_64"
+            )
+        )
+        runCommand(
+            macosX64NativeSourceDir,
+            listOf("cmake", "--build", macosX64NativeBuildDir.absolutePath)
+        )
+    }
+}
+
+tasks.register<Jar>("freetype_natives_macos_x64Jar") {
+    group = "extensions"
+    description = "Packages the macOS x64 GLFW FreeType native bridge and static FreeType library."
+
+    archiveBaseName.set(moduleName)
+    archiveVersion.set(LibExt.libVersion)
+    archiveClassifier.set("natives-macos-x64")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    onlyIf { isMacHost || (freetypeMacosX64NativeSourceDirProperty.isPresent && freetypeMacosX64NativeBridgeSourceDirProperty.isPresent) }
+
+    if(isMacHost) {
+        dependsOn("buildMacosX64NativeBridge")
+        from(providers.provider { macosX64NativeBuildDir }) {
+            include("**/libgdx2d_freetype_bridge.dylib")
+            include("**/libfreetype.a")
+            includeEmptyDirs = false
+            eachFile {
+                path = name
+            }
+        }
+    }
+    else {
+        from(providers.provider {
+            resolveDirectoryFromProperty(
+                freetypeMacosX64NativeSourceDirProperty.orNull,
+                "Set -PgdxFreetypeMacosX64NativeSourceDir=<path> to package macOS x64 FreeType natives."
+            )
+        }) {
+            include("**/*.dylib")
+            includeEmptyDirs = false
+            eachFile {
+                path = name
+            }
+        }
+        from(providers.provider {
+            resolveDirectoryFromProperty(
+                freetypeMacosX64NativeBridgeSourceDirProperty.orNull,
+                "Set -PgdxFreetypeMacosX64NativeBridgeSourceDir=<path> to package macOS x64 FreeType natives."
+            )
+        }) {
+            include("**/*.a")
+            includeEmptyDirs = false
+            eachFile {
+                path = name
+            }
+        }
+    }
+}
+
+tasks.register<Sync>("prepareMacosArm64NativeBridgeSource") {
+    group = "extensions"
+    description = "Copies the GLFW FreeType bridge sources into a macOS arm64 native build workspace."
+
+    from("src/main/resources/external_cpp/src/freetype")
+    into(macosArm64NativeSourceDir)
+}
+
+tasks.register("buildMacosArm64NativeBridge") {
+    group = "extensions"
+    description = "Builds the macOS arm64 GLFW FreeType native bridge and bundled FreeType static library."
+
+    dependsOn("freetype_prepare_source")
+    dependsOn("prepareMacosArm64NativeBridgeSource")
+    onlyIf { isMacHost }
+
+    outputs.file(File(macosArm64NativeBuildDir, "libgdx2d_freetype_bridge.dylib"))
+    outputs.file(File(macosArm64NativeBuildDir, "freetype-build/libfreetype.a"))
+
+    doLast {
+        macosArm64NativeBuildDir.mkdirs()
+        runCommand(
+            macosArm64NativeSourceDir,
+            listOf(
+                "cmake",
+                "-S", macosArm64NativeSourceDir.absolutePath,
+                "-B", macosArm64NativeBuildDir.absolutePath,
+                "-DGDX_FREETYPE_SOURCE_DIR=${freetypeSourceCacheDir.absolutePath}",
+                "-DGDX_FREETYPE_BUILD_SHARED=ON",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DCMAKE_OSX_ARCHITECTURES=arm64"
+            )
+        )
+        runCommand(
+            macosArm64NativeSourceDir,
+            listOf("cmake", "--build", macosArm64NativeBuildDir.absolutePath)
+        )
+    }
+}
+
+tasks.register<Jar>("freetype_natives_macos_arm64Jar") {
+    group = "extensions"
+    description = "Packages the macOS arm64 GLFW FreeType native bridge and static FreeType library."
+
+    archiveBaseName.set(moduleName)
+    archiveVersion.set(LibExt.libVersion)
+    archiveClassifier.set("natives-macos-arm64")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    onlyIf { isMacHost || (freetypeMacosArm64NativeSourceDirProperty.isPresent && freetypeMacosArm64NativeBridgeSourceDirProperty.isPresent) }
+
+    if(isMacHost) {
+        dependsOn("buildMacosArm64NativeBridge")
+        from(providers.provider { macosArm64NativeBuildDir }) {
+            include("**/libgdx2d_freetype_bridge.dylib")
+            include("**/libfreetype.a")
+            includeEmptyDirs = false
+            eachFile {
+                path = name
+            }
+        }
+    }
+    else {
+        from(providers.provider {
+            resolveDirectoryFromProperty(
+                freetypeMacosArm64NativeSourceDirProperty.orNull,
+                "Set -PgdxFreetypeMacosArm64NativeSourceDir=<path> to package macOS arm64 FreeType natives."
+            )
+        }) {
+            include("**/*.dylib")
+            includeEmptyDirs = false
+            eachFile {
+                path = name
+            }
+        }
+        from(providers.provider {
+            resolveDirectoryFromProperty(
+                freetypeMacosArm64NativeBridgeSourceDirProperty.orNull,
+                "Set -PgdxFreetypeMacosArm64NativeBridgeSourceDir=<path> to package macOS arm64 FreeType natives."
+            )
+        }) {
+            include("**/*.a")
+            includeEmptyDirs = false
+            eachFile {
+                path = name
+            }
+        }
+    }
+}
+
 tasks.register<Jar>("freetype_natives_windows_x64Jar") {
     group = "extensions"
     description = "Packages the Windows x64 GLFW FreeType native bridge and import library."
@@ -565,6 +756,12 @@ publishing {
             }
             if(isLinuxArm64Host || (freetypeLinuxArm64NativeSourceDirProperty.isPresent && freetypeLinuxArm64NativeBridgeSourceDirProperty.isPresent)) {
                 artifact(tasks.named("freetype_natives_linux_arm64Jar"))
+            }
+            if(isMacHost || (freetypeMacosX64NativeSourceDirProperty.isPresent && freetypeMacosX64NativeBridgeSourceDirProperty.isPresent)) {
+                artifact(tasks.named("freetype_natives_macos_x64Jar"))
+            }
+            if(isMacHost || (freetypeMacosArm64NativeSourceDirProperty.isPresent && freetypeMacosArm64NativeBridgeSourceDirProperty.isPresent)) {
+                artifact(tasks.named("freetype_natives_macos_arm64Jar"))
             }
             if(freetypeWindowsX64NativeSourceDirProperty.isPresent && freetypeWindowsX64NativeBridgeSourceDirProperty.isPresent) {
                 artifact(tasks.named("freetype_natives_windows_x64Jar"))

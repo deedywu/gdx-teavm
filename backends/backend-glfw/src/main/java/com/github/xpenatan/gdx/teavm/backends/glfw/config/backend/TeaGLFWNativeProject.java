@@ -92,6 +92,22 @@ public class TeaGLFWNativeProject {
             Files.writeString(new File(generatedSources, "app_include.c").toPath(),
                     new String(input.readAllBytes(), StandardCharsets.UTF_8), StandardCharsets.UTF_8);
         }
+        // backend-glfw ships these macOS/runtime shims so demos/apps don't need local overrides.
+        copyOptionalGeneratedResource("fiber.c");
+        copyOptionalGeneratedResource("uchar.h");
+    }
+
+    private void copyOptionalGeneratedResource(String resourceName) throws IOException {
+        try(var input = classLoader.getResourceAsStream(resourceName)) {
+            if(input == null) {
+                return;
+            }
+            Files.writeString(
+                    new File(generatedSources, resourceName).toPath(),
+                    new String(input.readAllBytes(), StandardCharsets.UTF_8),
+                    StandardCharsets.UTF_8
+            );
+        }
     }
 
     private void writeCMakeLists(String projectName) throws IOException {
